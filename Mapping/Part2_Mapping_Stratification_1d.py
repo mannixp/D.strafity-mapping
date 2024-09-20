@@ -5,12 +5,12 @@ from matplotlib.animation import FuncAnimation
 from scipy.integrate import cumulative_trapezoid
 from scipy.optimize import root_scalar
 
-plt.rcParams.update({
-    "text.usetex": True,
-    "font.family": "sans-serif",
-    "font.sans-serif": "Helvetica",
-    'text.latex.preamble': r'\usepackage{amsfonts}'
-})
+# plt.rcParams.update({
+#     "text.usetex": True,
+#     "font.family": "sans-serif",
+#     "font.sans-serif": "Helvetica",
+#     'text.latex.preamble': r'\usepackage{amsfonts}'
+# })
 
 """
 See Pope 1991, Mapping Closures...
@@ -115,7 +115,7 @@ def make_map(F_Y, z):
     Y_ = []
     for z_i in z:
         func = lambda x: F_Y(x) - F_Z(z_i)
-        sol = root_scalar(func, bracket=[-max(z), max(z)], method='brentq')
+        sol = root_scalar(func, bracket=[-10*max(z), 10*max(z)], method='brentq')
         Y_.append(sol.root)
 
     return np.asarray(Y_)
