@@ -273,6 +273,15 @@ if __name__ == "__main__":
 
     plt.show()
 
+    # As the number of grid points N \to \infty the forcing can in theory be approximated
+    # at y = 0.5 for the current parameters however there is a singularity. Of which type
+    # I do not know, but the forcing is approximately
+    #
+    # D ~ 1/(x - 0.5)
+    # 
+    # either multiplied by a very small constant or the denominator is taken to a higher
+    # odd power.  
+
     # %%
     # 4) Solve the time evolution of the mapping equation
     # from a Gaussian initial condition
