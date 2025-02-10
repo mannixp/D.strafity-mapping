@@ -1,0 +1,12 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Data files
+*.h5
+*.vtr
+
+# Ouptut images & Movies
+*.png
+*.mp4
