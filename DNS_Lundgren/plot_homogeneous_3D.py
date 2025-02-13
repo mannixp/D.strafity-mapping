@@ -78,36 +78,217 @@ def video(data_dir):
     return None
 
 
-def spectra(data_dir):
-    """Plot the time-averaged spectra of the Kinetic energy and buoyancy variance."""
+def average_over_discs_2D(arr, radius_bins):
+    """
+    Averages the array over discs of constant radius.
+
+    Parameters:
+    - arr: 2D numpy array with shape (x, y)
+    - radius_bins: List or array of radius bin edges that define the discs
+
+    Returns:
+    - avg_per_disc: Array of average values for each disc
+    - radii: Midpoint of each disc for reporting purposes
+    """
+
+    # Create a 2D grid of coordinates (x, y, z)
+    x, y = np.indices(arr.shape)
+
+    # Calculate the radial distance from the origin for each point
+    r = np.sqrt(x**2 + y**2)
+
+    # Initialize an array to store the averaged values for each disc
+    avg_per_disc = []
+
+    # Define shell radii (midpoint of each bin)
+    radii = 0.5 * (radius_bins[1:] + radius_bins[:-1])
+
+    # Loop through each shell
+    for i in range(len(radius_bins) - 1):
+        # Create a mask for the points within the current shell
+        mask = (r >= radius_bins[i]) & (r < radius_bins[i + 1])
+        
+        # Extract values from the original array that lie within the shell
+        values_in_disc = arr[mask]
+        
+        # Compute the average of the values in the shell
+        if values_in_disc.size > 0:
+            avg_per_disc.append(np.mean(values_in_disc))
+        else:
+            avg_per_disc.append(np.nan)  # In case the shell has no points
+
+    return np.array(avg_per_disc), radii
 
 
-    f  = h5py.File(data_dir + 'scalar_data/scalar_data_s1.h5', mode='r')
+def average_over_shells_3D(arr, radius_bins):
+    """
+    Averages the array over spherical shells of constant radius.
+
+    Parameters:
+    - arr: 3D numpy array with shape (x, y, z)
+    - radius_bins: List or array of radius bin edges that define the shells
+
+    Returns:
+    - avg_per_shell: Array of average values for each shell
+    - radii: Midpoint of each shell for reporting purposes
+    """
+
+    # Create a 3D grid of coordinates (x, y, z)
+    x, y, z = np.indices(arr.shape)
+
+    # Calculate the radial distance from the origin for each point
+    r = np.sqrt(x**2 + y**2 + z**2)
+
+    # Initialize an array to store the averaged values for each shell
+    avg_per_shell = []
+
+    # Define shell radii (midpoint of each bin)
+    radii = 0.5 * (radius_bins[1:] + radius_bins[:-1])
+
+    # Loop through each shell
+    for i in range(len(radius_bins) - 1):
+        # Create a mask for the points within the current shell
+        mask = (r >= radius_bins[i]) & (r < radius_bins[i + 1])
+        
+        # Extract values from the original array that lie within the shell
+        values_in_shell = arr[mask]
+        
+        # Compute the average of the values in the shell
+        if values_in_shell.size > 0:
+            avg_per_shell.append(np.mean(values_in_shell))
+        else:
+            avg_per_shell.append(np.nan)  # In case the shell has no points
+
+    return np.array(avg_per_shell), radii
+
+
+def energy_spectrum(data_dir, N=50):
+    """
+    Compute the energy spectrum and the horizontally averaged spectra of the velocity field
     
-    fig, (ax1,ax2) = plt.subplots(ncols=2,figsize=(8,4),constrained_layout=True)
-   
-    ax1.semilogy(f['tasks/Eu(kx)'][-1,:,0,0] ,'r.')
-    ax1.set_ylabel(r'Kinetic Energy')
-    ax1.set_xlabel(r'Fourier mode kx')
+    The energy spectrum see chapter 6 pope is defined as
+    
+    E(k,t) = < u_hat*(k,t) u_hat(k,t)>
 
-    ax2.semilogy(f['tasks/Eu(kz)'][-1,0,0,:],'b.')
-    ax2.set_ylabel(r'Kinetic Energy')
-    ax2.set_xlabel(r'Fourier mode kz')
+    where 
+    
+    u(x) = sum u_hat e^ikx = sum (A_k + i*B_k)*(cos(k x) + i*sin(k x))
+
+    thus
+
+    E(k,t) = < u_hat*(k,t) u_hat(k,t)> = A_k**2 + B_k**2
+
+    In Dedalus the amplitudes are stored as sine and cosine 
+
+    u(x) = sum_k A_k cos(k x) - B_k sin(k x)
+    
+    therefore we just access A_k and B_k and square them.
+    """
+
+    f = h5py.File(data_dir + "/snapshots/snapshots_s1.h5", mode='r')
+    
+    # Ordering of coefficients is 
+    # cos(0*x),sin(0*x), cos(1*x),sin(1*x), .... 
+    # in each dimension
+    b_k = f['tasks/b_k'][-1, :, :, :]
+
+    u_k = f['tasks/u_k'][-1, :, :, :]
+    v_k = f['tasks/v_k'][-1, :, :, :]
+    w_k = f['tasks/w_k'][-1, :, :, :]
+    
+    t  = f['tasks/u_k'].dims[0][0][:]
+    #kx = f['tasks/u_k'].dims[1][0][::2, ::2, ::2]
+    #ky = f['tasks/u_k'].dims[2][0][::2, ::2, ::2]
+    #kz = f['tasks/u_k'].dims[3][0][::2, ::2, ::2]
+
+    f.close()
+
+    # 1) First square all the amplitudes
+    E_k = u_k**2 + v_k**2 + w_k**2
+    B_k = b_k**2
+
+    # 2) Convert to k=0,1,2,.. ordering
+    E_k = E_k[::2, ::2, ::2] + E_k[1::2, 1::2, 1::2]
+    B_k = B_k[::2, ::2, ::2] + B_k[1::2, 1::2, 1::2]
+
+    # 3) Define the vector k = (kx,ky,kz)
+    kx = np.arange(0, E_k.shape[0], 1)
+    ky = np.arange(0, E_k.shape[1], 1)
+    kz = np.arange(0, E_k.shape[2], 1)
+     
+    # 4) Convert to the energy spectrum i.e. E(|k|) vs. |k|     
+    k_max_3D = np.sqrt(kx[-1]**2 + ky[-1]**2 + kz[-1]**2)
+    k_bins = np.linspace(0, k_max_3D, N)
+    Eu_1d, k_1d = average_over_shells_3D(arr=E_k, radius_bins=k_bins)
+    Eb_1d, k_1d = average_over_shells_3D(arr=B_k, radius_bins=k_bins)
+
+    # 5) Convert to the 2D energy spectrum i.e. E(k_h,k_z) vs. k_h = |(k_x,k_y)|, k_z     
+    k_max_2D = np.sqrt(kx[-1]**2 + ky[-1]**2)
+    k_bins = np.linspace(0, k_max_2D, N)
+    Eu_2D = np.zeros((N-1, len(kz)))
+    Eb_2D = np.zeros((N-1, len(kz)))
+    for k, kz_k in enumerate(kz):
+        
+        Eu_1d_i, k_H = average_over_discs_2D(arr=E_k[:, :, k], radius_bins=k_bins)
+        Eu_2D[:, k] = Eu_1d_i
+
+        Eb_1d_i, k_H = average_over_discs_2D(arr=B_k[:, :, k], radius_bins=k_bins)
+        Eb_2D[:, k] = Eb_1d_i
+
+
+    fig = plt.figure(figsize=(8,4), layout='constrained')
+
+    ax1 = fig.add_subplot(121)
+    ax1.semilogy(k_1d, Eu_1d)
+    ax1.set_xlabel(r'$|\mathbf{k}|$')
+    ax1.set_ylabel(r'$E_U(|\mathbf{k}|,t)$')
+    ax1.set_ylim([1e-08, 1e-02])
+    ax1.set_xlim([0, k_max_3D])
+    
+    ax2 = fig.add_subplot(122)
+    for k, kz_k in enumerate(kz):
+        if k%5 == 0:
+            ax2.semilogy(k_H, Eu_2D[:, k], label=r'$k_z = %d$' % kz_k)
+    ax2.set_xlabel(r'$k_H$')
+    ax2.set_ylabel(r'$E_U(k_H,k_z,t)$')
+    ax2.set_ylim([1e-08, 1e-02])
+    ax2.set_xlim([0, k_max_2D])
+    ax2.legend()
+
     fig.savefig('Kinetic Energy Spectra', dpi=100)
     plt.close(fig)
-    
-    fig, (ax1,ax2) = plt.subplots(ncols=2,figsize=(8,4))
-    ax1.semilogy(f['tasks/Eb(kx)'][-1,:,0,0] ,'r.')
-    ax1.set_ylabel(r'Buoyancy Energy')
-    ax1.set_xlabel(r'Fourier mode kx')
 
-    ax2.semilogy(f['tasks/Eb(kz)'][-1,0,0,:],'b.')
-    ax2.set_ylabel(r'Buoyancy Energy')
-    ax2.set_xlabel(r'Fourier mode kz')
+    # Create a 3D plot
+    fig = plt.figure(figsize=(8,4), layout='constrained')
+
+    ax1 = fig.add_subplot(121)
+    ax1.semilogy(k_1d, Eb_1d)
+    ax1.set_xlabel(r'$|\mathbf{k}|$')
+    ax1.set_ylabel(r'$E_B(|\mathbf{k}|,t)$')
+    ax1.set_ylim([1e-08, 1e-02])
+    ax1.set_xlim([0, k_max_3D])
+    
+    ax2 = fig.add_subplot(122)
+    for k, kz_k in enumerate(kz):
+        if k%5 == 0:
+            ax2.semilogy(k_H, Eb_2D[:, k], label=r'$k_z = %d$' % kz_k)
+    ax2.set_xlabel(r'$k_H$')
+    ax2.set_ylabel(r'$E_B(k_H,k_z,t)$')
+    ax2.set_ylim([1e-08, 1e-02])
+    ax2.set_xlim([0, k_max_2D])
+    ax2.legend()
+
     fig.savefig('Buoyancy Energy Spectra', dpi=100)
     plt.close(fig)
 
+    return None
 
+
+def time_series(data_dir):
+    """Plot the time-series of the Kinetic energy and buoyancy variance."""
+
+    f  = h5py.File(data_dir + 'scalar_data/scalar_data_s1.h5', mode='r')
+    
     # Shape time,x,y,z
     Eu     = f['tasks/Eu(t)'][:,0,0,0]
     Eb     = f['tasks/Eb(t)'][:,0,0,0]
@@ -132,7 +313,7 @@ def spectra(data_dir):
     fig.savefig('EnergyTimeSeries.png',dpi=100)
     plt.close(fig)
 
-    return None;
+    return None
 
 
 def pdfs(data_dir):
@@ -355,5 +536,6 @@ if __name__ == "__main__":
     data_dir = "./"
     video("./")
     main("./")
-    spectra("./")
+    time_series("./")
+    energy_spectrum("./")
     plot_pdfs("./")

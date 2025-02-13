@@ -26,8 +26,7 @@ logger = logging.getLogger(__name__)
 
 comm = MPI.COMM_WORLD
 rank = comm.rank
-ncpu = comm.size# u = u - d3.Average(u)
-# b = b - d3.Average(b)
+ncpu = comm.size
 
 log2 = np.log2(ncpu)
 if log2 == int(log2):
@@ -35,15 +34,15 @@ if log2 == int(log2):
 logger.info("running on processor mesh={}".format(mesh))
 
 # Parameters
-L = 1# 2*np.pi
-N = 64
+L = 2*np.pi
+N = 32
 
 Ri_B = 0.2
 Re = 300
 Pr = 1
 
 dealias = 3/2
-stop_sim_time = 10
+stop_sim_time = 5
 timestepper = d3.MCNAB2
 max_timestep = 1e-3
 dtype = np.float64
@@ -84,12 +83,12 @@ solver = problem.build_solver(timestepper)
 solver.stop_sim_time = stop_sim_time
 
 # Initial conditions
-# b.fill_random('g', seed=42, distribution='normal', scale=1e-0) # Random noise
-# u.fill_random('g', seed=98, distribution='normal', scale=1e-0) # Random noise
-# u = u - d3.Average(u)
-# b = b - d3.Average(b)
+b.fill_random('g', seed=42, distribution='normal', scale=1e-0) # Random noise
+u.fill_random('g', seed=98, distribution='normal', scale=1e-0) # Random noise
+u = u - d3.Average(u)
+b = b - d3.Average(b)
 
-write, initial_timestep = solver.load_state("checkpoints/checkpoints_s1.h5")
+#write, initial_timestep = solver.load_state("checkpoints/checkpoints_s1.h5")
 
 # Analysis
 checkpoints = solver.evaluator.add_file_handler('checkpoints', sim_dt=1)
@@ -98,30 +97,26 @@ checkpoints.add_tasks(solver.state)
 # Snapshots
 snapshots = solver.evaluator.add_file_handler('snapshots', sim_dt=.1)
 
-snapshots.add_task(b,    name='b', scales=3/2)
-snapshots.add_task(u@ex, name='u', scales=3/2)
-snapshots.add_task(u@ey, name='v', scales=3/2)
-snapshots.add_task(u@ez, name='w', scales=3/2)
+snapshots.add_task(b   , layout='g', name='b', scales=2)
+snapshots.add_task(u@ex, layout='g', name='u', scales=2)
+snapshots.add_task(u@ey, layout='g', name='v', scales=2)
+snapshots.add_task(u@ez, layout='g', name='w', scales=2)
+
+snapshots.add_task(b   , layout='c', name='b_k', scales=1)
+snapshots.add_task(u@ex, layout='c', name='u_k', scales=1)
+snapshots.add_task(u@ey, layout='c', name='v_k', scales=1)
+snapshots.add_task(u@ez, layout='c', name='w_k', scales=1)
+
 # snapshots.add_task(d3.grad(b)   , name='grad_b',scales=1)
 # snapshots.add_task(d3.grad(u@ez), name='grad_w',scales=1)
 # snapshots.add_task(d3.grad(p)   , name='grad_p',scales=1)
 
 # Time Series and spectra
-scalar = solver.evaluator.add_file_handler('scalar_data',iter=50)
-
+scalar = solver.evaluator.add_file_handler('scalar_data', iter=50)
 scalar.add_task(d3.Integrate(u@u ),  layout='g', name='Eu(t)')
 scalar.add_task(d3.Integrate(b**2),  layout='g', name='Eb(t)')
-
 scalar.add_task(d3.Integrate(d3.grad(u@ez)@d3.grad(u@ez) + d3.grad(u@ey)@d3.grad(u@ey) + d3.grad(u@ex)@d3.grad(u@ex))/Re,       layout='g', name='dU^2(t)/Re')
 scalar.add_task(d3.Integrate(d3.grad(b)@d3.grad(b))/(Re*Pr), layout='g', name='dB^2(t)/(Re*Pr)')
-
-scalar.add_task(d3.Integrate(u@u, ['y', 'z']), layout='c', name='Eu(kx)')
-scalar.add_task(d3.Integrate(u@u, ['x', 'z']), layout='c', name='Eu(ky)')
-scalar.add_task(d3.Integrate(u@u, ['x', 'y']), layout='c', name='Eu(kz)')
-
-scalar.add_task(d3.Integrate(b**2, ['y', 'z']), layout='c', name='Eb(kx)')
-scalar.add_task(d3.Integrate(b**2, ['x', 'z']), layout='c', name='Eb(ky)')
-scalar.add_task(d3.Integrate(b**2, ['x', 'y']), layout='c', name='Eb(kz)')
 
 Z = dist.Field(name='Z', bases=zbasis); Z['g'] = z[:];
 scalar.add_task(d3.Integrate((u@ez)*b),  layout='g', name='<wB>')
