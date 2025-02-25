@@ -19,7 +19,7 @@ def grad(x):
     return D/(2*dx)
 
 
-def laplacian(x, bcs='Dirichlet'):
+def laplacian(x, bcs='Neumann'):
     """Laplacian ∂^2/∂x^2"""
 
     N = len(x)
