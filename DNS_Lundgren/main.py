@@ -34,17 +34,17 @@ if log2 == int(log2):
 logger.info("running on processor mesh={}".format(mesh))
 
 # Parameters
-L = 2*np.pi
-N = 32
+L = 1
+N = 128
 
 Ri_B = 0.2
-Re = 300
+Re = 800
 Pr = 1
 
 dealias = 3/2
-stop_sim_time = 5
+stop_sim_time = 10
 timestepper = d3.MCNAB2
-max_timestep = 1e-3
+max_timestep = 2.5e-04
 dtype = np.float64
 
 # Bases
@@ -115,7 +115,7 @@ snapshots.add_task(u@ez, layout='c', name='w_k', scales=1)
 scalar = solver.evaluator.add_file_handler('scalar_data', iter=50)
 scalar.add_task(d3.Integrate(u@u ),  layout='g', name='Eu(t)')
 scalar.add_task(d3.Integrate(b**2),  layout='g', name='Eb(t)')
-scalar.add_task(d3.Integrate(d3.grad(u@ez)@d3.grad(u@ez) + d3.grad(u@ey)@d3.grad(u@ey) + d3.grad(u@ex)@d3.grad(u@ex))/Re,       layout='g', name='dU^2(t)/Re')
+scalar.add_task(d3.Integrate(d3.grad(u@ez)@d3.grad(u@ez) + d3.grad(u@ey)@d3.grad(u@ey) + d3.grad(u@ex)@d3.grad(u@ex))/Re, layout='g', name='dU^2(t)/Re')
 scalar.add_task(d3.Integrate(d3.grad(b)@d3.grad(b))/(Re*Pr), layout='g', name='dB^2(t)/(Re*Pr)')
 
 Z = dist.Field(name='Z', bases=zbasis); Z['g'] = z[:];

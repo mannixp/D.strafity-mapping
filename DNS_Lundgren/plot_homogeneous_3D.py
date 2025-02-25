@@ -1,23 +1,19 @@
 """
-Plot planes from joint analysis files.
+Plot data generated using main.py
 
-Usage:
-    plot_slices.py <files>... [--output=<dir>]
-
-Options:
-    --output=<dir>  Output directory [default: ./frames]
+python3 plot_homogeneous_3D.py
 
 """
 
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-plt.rcParams.update({
-    "text.usetex": True,
-    "font.family": "sans-serif",
-    "font.sans-serif": "Helvetica",
-    'text.latex.preamble': r'\usepackage{amsfonts}'
-})
+# plt.rcParams.update({
+#     "text.usetex": True,
+#     "font.family": "sans-serif",
+#     "font.sans-serif": "Helvetica",
+#     'text.latex.preamble': r'\usepackage{amsfonts}'
+# })
 
 
 def main(data_dir):
@@ -60,7 +56,7 @@ def video(data_dir):
         fig, ax = plt.subplots()
         ax.set_xlabel(r'x')
         ax.set_ylabel(r'z')
-        quad = ax.pcolormesh(x, z, b[0, :, :].T, cmap='RdBu')
+        quad = ax.pcolormesh(x, z, b[-1, :, :].T, cmap='RdBu')
         fig.colorbar(quad, ax=ax)
        
         # Animation function
@@ -76,6 +72,48 @@ def video(data_dir):
         plt.close(fig)
 
     return None
+
+
+
+def average_over_discs_2D_v2(Φ, kx, ky, kz, N = 100):
+
+    π = np.pi
+    shape = Φ.shape
+
+    # Create coordinate grids
+    kx, ky = np.meshgrid(kx,ky,indexing="ij")
+
+    # Compute radial distances
+    r = np.sqrt(kx**2 + ky**2)
+
+    # Create a 2D array
+    kh = np.unique(r.flatten())
+    Eh = np.zeros( (len(kh),len(kz)) )
+
+    # Compute the E_l i.e. when |k| = r_l
+    for k in range(shape[2]):
+        
+        radial_E = []
+        radial_r = []
+        
+        for i in range(shape[0]):
+            for j in range(shape[1]):
+                
+                # Integrate over the circle assuming isotropic  dA = r dθ      
+                r_l = r[i, j]
+                E_l = (1/2)*Φ[i, j, k]*r_l*(2*π)
+                radial_E.append(E_l)
+                radial_r.append(r_l)
+               
+        E_k = np.asarray(radial_E)
+        r_k = np.asarray(radial_r)
+
+        # Sum all E_l associated with the same r_l to integrate over the spheres
+        for i, r_i in enumerate(kh):
+            indx = (r_k == r_i).nonzero()
+            Eh[i, k] = np.mean( E_k[indx] )
+
+    return Eh, kh
 
 
 def average_over_discs_2D(arr, radius_bins):
@@ -120,6 +158,43 @@ def average_over_discs_2D(arr, radius_bins):
     return np.array(avg_per_disc), radii
 
 
+def average_over_shells_3D_v2(Φ, kx, ky, kz):
+
+    π = np.pi
+    shape = Φ.shape
+
+    # Create coordinate grids
+    kx, ky, kz = np.meshgrid(kx,ky,kz,indexing="ij")
+
+    # Compute radial distances
+    r = np.sqrt(kx**2 + ky**2 + kz**2)
+
+    # Compute the E_l i.e. when |k| = r_l
+    radial_E = []
+    radial_r = []
+    for i in range(shape[0]):
+        for j in range(shape[1]):
+            for k in range(shape[2]):
+
+                # Integrate over the shell assuming isotropic   dA = r^2 sin(θ) dθ d𝜑     
+                r_l = r[i, j, k]
+                E_l = (1/2)*Φ[i, j, k]*(r_l**2)*(4*π)
+                radial_E.append(E_l)
+                radial_r.append(r_l)
+               
+    E = np.asarray(radial_E)
+    r = np.asarray(radial_r)
+
+    # Sum all E_l associated with the same r_l to integrate over the spheres
+    k   = np.unique(r)
+    E_k = 0*k
+    for i, r_i in enumerate(k):
+        indx = (r == r_i).nonzero()
+        E_k[i] = np.mean( E[indx] )
+
+    return E_k, k
+
+
 def average_over_shells_3D(arr, radius_bins):
     """
     Averages the array over spherical shells of constant radius.
@@ -162,7 +237,7 @@ def average_over_shells_3D(arr, radius_bins):
     return np.array(avg_per_shell), radii
 
 
-def energy_spectrum(data_dir, N=50):
+def energy_spectrum(data_dir, N=100):
     """
     Compute the energy spectrum and the horizontally averaged spectra of the velocity field
     
@@ -197,62 +272,51 @@ def energy_spectrum(data_dir, N=50):
     w_k = f['tasks/w_k'][-1, :, :, :]
     
     t  = f['tasks/u_k'].dims[0][0][:]
-    #kx = f['tasks/u_k'].dims[1][0][::2, ::2, ::2]
-    #ky = f['tasks/u_k'].dims[2][0][::2, ::2, ::2]
-    #kz = f['tasks/u_k'].dims[3][0][::2, ::2, ::2]
+    kx = f['tasks/u_k'].dims[1][0][::2, ::2, ::2]
+    ky = f['tasks/u_k'].dims[2][0][::2, ::2, ::2]
+    kz = f['tasks/u_k'].dims[3][0][::2, ::2, ::2]
 
     f.close()
 
     # 1) First square all the amplitudes
-    E_k = u_k**2 + v_k**2 + w_k**2
+    R_ii = u_k**2 + v_k**2 + w_k**2
     B_k = b_k**2
 
     # 2) Convert to k=0,1,2,.. ordering
-    E_k = E_k[::2, ::2, ::2] + E_k[1::2, 1::2, 1::2]
-    B_k = B_k[::2, ::2, ::2] + B_k[1::2, 1::2, 1::2]
-
+    R_ii = R_ii[::2, ::2, ::2] + R_ii[1::2, 1::2, 1::2]
+    B_k  = B_k[::2, ::2, ::2]  +  B_k[1::2, 1::2, 1::2]
+    
     # 3) Define the vector k = (kx,ky,kz)
-    kx = np.arange(0, E_k.shape[0], 1)
-    ky = np.arange(0, E_k.shape[1], 1)
-    kz = np.arange(0, E_k.shape[2], 1)
-     
+    kx = np.unique(kx)
+    ky = np.unique(ky)
+    kz = np.unique(kz)
+
     # 4) Convert to the energy spectrum i.e. E(|k|) vs. |k|     
-    k_max_3D = np.sqrt(kx[-1]**2 + ky[-1]**2 + kz[-1]**2)
-    k_bins = np.linspace(0, k_max_3D, N)
-    Eu_1d, k_1d = average_over_shells_3D(arr=E_k, radius_bins=k_bins)
-    Eb_1d, k_1d = average_over_shells_3D(arr=B_k, radius_bins=k_bins)
+    Eu_1d, k = average_over_shells_3D_v2(R_ii,kx, ky, kz)
+    Eb_1d, k = average_over_shells_3D_v2(B_k, kx, ky, kz)
 
     # 5) Convert to the 2D energy spectrum i.e. E(k_h,k_z) vs. k_h = |(k_x,k_y)|, k_z     
-    k_max_2D = np.sqrt(kx[-1]**2 + ky[-1]**2)
-    k_bins = np.linspace(0, k_max_2D, N)
-    Eu_2D = np.zeros((N-1, len(kz)))
-    Eb_2D = np.zeros((N-1, len(kz)))
-    for k, kz_k in enumerate(kz):
-        
-        Eu_1d_i, k_H = average_over_discs_2D(arr=E_k[:, :, k], radius_bins=k_bins)
-        Eu_2D[:, k] = Eu_1d_i
-
-        Eb_1d_i, k_H = average_over_discs_2D(arr=B_k[:, :, k], radius_bins=k_bins)
-        Eb_2D[:, k] = Eb_1d_i
+    Eu_2d, kh = average_over_discs_2D_v2(R_ii,kx, ky, kz)
+    Eb_2d, kh = average_over_discs_2D_v2(B_k, kx, ky, kz)
 
 
     fig = plt.figure(figsize=(8,4), layout='constrained')
 
     ax1 = fig.add_subplot(121)
-    ax1.semilogy(k_1d, Eu_1d)
+    ax1.semilogy(k, Eu_1d)
     ax1.set_xlabel(r'$|\mathbf{k}|$')
     ax1.set_ylabel(r'$E_U(|\mathbf{k}|,t)$')
-    ax1.set_ylim([1e-08, 1e-02])
-    ax1.set_xlim([0, k_max_3D])
+    #ax1.set_ylim([1e-08, 1e-02])
+    ax1.set_xlim([0, np.max(k)])
     
     ax2 = fig.add_subplot(122)
-    for k, kz_k in enumerate(kz):
-        if k%5 == 0:
-            ax2.semilogy(k_H, Eu_2D[:, k], label=r'$k_z = %d$' % kz_k)
+    for i, kz_i in enumerate(kz):
+        if (i%5 == 0) and (i !=0):
+            ax2.semilogy(kh, Eu_2d[:, i], label=r'$k_z = %d$' % kz_i)
     ax2.set_xlabel(r'$k_H$')
     ax2.set_ylabel(r'$E_U(k_H,k_z,t)$')
-    ax2.set_ylim([1e-08, 1e-02])
-    ax2.set_xlim([0, k_max_2D])
+    #ax2.set_ylim([1e-16, 1e-02])
+    ax2.set_xlim([0, np.max(k)])
     ax2.legend()
 
     fig.savefig('Kinetic Energy Spectra', dpi=100)
@@ -262,20 +326,20 @@ def energy_spectrum(data_dir, N=50):
     fig = plt.figure(figsize=(8,4), layout='constrained')
 
     ax1 = fig.add_subplot(121)
-    ax1.semilogy(k_1d, Eb_1d)
+    ax1.semilogy(k, Eb_1d)
     ax1.set_xlabel(r'$|\mathbf{k}|$')
     ax1.set_ylabel(r'$E_B(|\mathbf{k}|,t)$')
-    ax1.set_ylim([1e-08, 1e-02])
-    ax1.set_xlim([0, k_max_3D])
+    #ax1.set_ylim([1e-08, 1e-02])
+    ax1.set_xlim([0, np.max(k)])
     
     ax2 = fig.add_subplot(122)
-    for k, kz_k in enumerate(kz):
-        if k%5 == 0:
-            ax2.semilogy(k_H, Eb_2D[:, k], label=r'$k_z = %d$' % kz_k)
+    for i, kz_i in enumerate(kz):
+        if (i%5 == 0) and (i !=0):
+            ax2.semilogy(kh, Eb_2d[:, i], label=r'$k_z = %d$' % kz_i)
     ax2.set_xlabel(r'$k_H$')
     ax2.set_ylabel(r'$E_B(k_H,k_z,t)$')
-    ax2.set_ylim([1e-08, 1e-02])
-    ax2.set_xlim([0, k_max_2D])
+    #ax2.set_ylim([1e-16, 1e-02])
+    ax2.set_xlim([0, np.max(kh)])
     ax2.legend()
 
     fig.savefig('Buoyancy Energy Spectra', dpi=100)
@@ -534,8 +598,8 @@ def plot_pdfs(data_dir, Nlevels=50, norm='log'):
 if __name__ == "__main__":
 
     data_dir = "./"
-    video("./")
-    main("./")
-    time_series("./")
+    #video("./")
+    #main("./")
+    #time_series("./")
     energy_spectrum("./")
-    plot_pdfs("./")
+    #plot_pdfs("./")
