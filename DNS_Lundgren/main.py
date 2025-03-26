@@ -12,6 +12,11 @@ t* = L^(2/3) epsilon^(-1/3)
 Ri_B = N^2 * L^(4/3) / epsilon^(2/3)
 Re   = epsilon^(1/3) * L^(4/3) / nu
 
+where in A. Maffioli et al. JFM (2016) these are written as
+
+Fr^2 = 1/Ri_B
+Re_B = Re Fr^2
+
 To run and plot using e.g. 4 processes:
     $ mpiexec -n 4 python simulate.py
 """
@@ -34,25 +39,36 @@ if log2 == int(log2):
 logger.info("running on processor mesh={}".format(mesh))
 
 # Parameters
-L = 1
-N = 128
+Lv = 1
+Lh = 2.5*Lv
+Nv = 64
+Nh = 128
 
-Ri_B = 0.2
-Re = 800
+Re = 2.8*(10**3)
+Fr = 1.6/(10**2)
+Ri_B = 1/(Fr**2)
+Re_B = Re*(Fr**2)
 Pr = 1
 
+# Write to a file
+Params = {"Re":Re,"Fr":Fr,"Re_B":Re_B,"Pr":Pr,"Ri_B":Ri_B,"Nh":Nh,"Nv":Nv, "Lh":Lh,"Lv":Lv}
+with open("Parameters.txt", "w") as file:
+    for key, value in Params.items():
+        file.write(f"{key}: {str(value)}\n")
+
+
 dealias = 3/2
-stop_sim_time = 10
-timestepper = d3.MCNAB2
-max_timestep = 2.5e-04
+stop_sim_time = .1
+timestepper = d3.RK222
+max_timestep = 1e-04
 dtype = np.float64
 
 # Bases
 coords = d3.CartesianCoordinates('x', 'y', 'z')
 dist = d3.Distributor(coords, dtype=dtype, mesh=mesh)
-xbasis = d3.RealFourier(coords['x'], size=N, bounds=(-L/2, L/2), dealias=dealias)
-ybasis = d3.RealFourier(coords['y'], size=N, bounds=(-L/2, L/2), dealias=dealias)
-zbasis = d3.RealFourier(coords['z'], size=N, bounds=(-L/2, L/2), dealias=dealias)
+xbasis = d3.RealFourier(coords['x'], size=Nh, bounds=(-Lh/2, Lh/2), dealias=dealias)
+ybasis = d3.RealFourier(coords['y'], size=Nh, bounds=(-Lh/2, Lh/2), dealias=dealias)
+zbasis = d3.RealFourier(coords['z'], size=Nv, bounds=(-Lv/2, Lv/2), dealias=dealias)
 
 # Fields
 p = dist.Field(name='p', bases=(xbasis, ybasis, zbasis))
@@ -138,7 +154,8 @@ startup_iter = 10
 try:
     logger.info('Starting main loop')
     while solver.proceed:
-        timestep = CFL.compute_timestep()
+        timestep = max_timestep 
+        #timestep = CFL.compute_timestep()
         solver.step(timestep)
         if (solver.iteration-1) % 100 == 0:
 

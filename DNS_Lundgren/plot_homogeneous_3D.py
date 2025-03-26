@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 #     'text.latex.preamble': r'\usepackage{amsfonts}'
 # })
 
+import matplotlib.animation as animation
+print(animation.writers.list())
 
 def main(data_dir):
     """Save plot of specified tasks for given range of analysis writes."""
@@ -27,11 +29,15 @@ def main(data_dir):
         y = file['tasks/b'].dims[2][0][:]
         z = file['tasks/b'].dims[3][0][:]
 
-        fig = plt.figure()
-        plt.xlabel(r'x')
-        plt.ylabel(r'z')
-        plt.pcolormesh(x, z, b.T, cmap='RdBu')
-        fig.savefig('homogeneous_RBC', dpi=100)
+        Lv = 1
+        Lh = abs(x[-1]-x[0])
+
+        fig, ax = plt.subplots()
+        ax.set_box_aspect(Lv/Lh)
+        ax.set_xlabel(r'x')
+        ax.set_ylabel(r'z')
+        ax.pcolormesh(x, z, b.T, cmap='RdBu')
+        fig.savefig('homogeneous_RBC.png', dpi=100)
         fig.clear()
 
     plt.close(fig)
@@ -43,6 +49,7 @@ def video(data_dir):
     """Save plot of specified tasks for given range of analysis writes."""
 
     import matplotlib.animation as animation
+    print(animation.writers.list())
 
     # Plot writes
     with h5py.File(data_dir + "/snapshots/snapshots_s1.h5", mode='r') as file:
@@ -53,7 +60,11 @@ def video(data_dir):
         y = file['tasks/b'].dims[2][0][:]
         z = file['tasks/b'].dims[3][0][:]
 
+        Lv = 1
+        Lh = abs(x[-1]-x[0])
+
         fig, ax = plt.subplots()
+        ax.set_box_aspect(Lv/Lh)
         ax.set_xlabel(r'x')
         ax.set_ylabel(r'z')
         quad = ax.pcolormesh(x, z, b[-1, :, :].T, cmap='RdBu')
@@ -66,8 +77,8 @@ def video(data_dir):
             return quad,
 
         # Create animation
-        ani = animation.FuncAnimation(fig, update, frames=int(b.shape[0]), interval=10, blit=False)
-        ani.save("animation.mp4", writer="ffmpeg", fps=5)
+        ani = animation.FuncAnimation(fig, update, frames=int(b.shape[0]), interval=2, blit=False)
+        ani.save("animation.mp4", writer="ffmpeg", fps=2)
 
         plt.close(fig)
 
@@ -272,10 +283,14 @@ def energy_spectrum(data_dir, N=100):
     w_k = f['tasks/w_k'][-1, :, :, :]
     
     t  = f['tasks/u_k'].dims[0][0][:]
-    kx = f['tasks/u_k'].dims[1][0][::2, ::2, ::2]
-    ky = f['tasks/u_k'].dims[2][0][::2, ::2, ::2]
-    kz = f['tasks/u_k'].dims[3][0][::2, ::2, ::2]
-
+    # kx = f['tasks/u_k'].dims[1][0][:, :, :]
+    # ky = f['tasks/u_k'].dims[2][0][:, :, :]
+    # kz = f['tasks/u_k'].dims[3][0][:, :, :]
+    
+    # print(u_k.shape)
+    # kx = kx.ravel(); print('kx = ',kx)
+    # ky = ky.ravel(); print('ky = ',ky)
+    # kz = kz.ravel(); print('kz = ',kz)
     f.close()
 
     # 1) First square all the amplitudes
@@ -287,9 +302,9 @@ def energy_spectrum(data_dir, N=100):
     B_k  = B_k[::2, ::2, ::2]  +  B_k[1::2, 1::2, 1::2]
     
     # 3) Define the vector k = (kx,ky,kz)
-    kx = np.unique(kx)
-    ky = np.unique(ky)
-    kz = np.unique(kz)
+    kx = np.arange(0,(u_k.shape[0]//2)); #print('kx = ',kx)
+    ky = np.arange(0,(u_k.shape[1]//2)); #print('ky = ',ky)
+    kz = np.arange(0,(u_k.shape[2]//2)); #print('kz = ',kz)
 
     # 4) Convert to the energy spectrum i.e. E(|k|) vs. |k|     
     Eu_1d, k = average_over_shells_3D_v2(R_ii,kx, ky, kz)
@@ -316,10 +331,10 @@ def energy_spectrum(data_dir, N=100):
     ax2.set_xlabel(r'$k_H$')
     ax2.set_ylabel(r'$E_U(k_H,k_z,t)$')
     #ax2.set_ylim([1e-16, 1e-02])
-    ax2.set_xlim([0, np.max(k)])
+    ax2.set_xlim([0, np.max(kh)])
     ax2.legend()
 
-    fig.savefig('Kinetic Energy Spectra', dpi=100)
+    fig.savefig('KineticEnergySpectra.png', dpi=100)
     plt.close(fig)
 
     # Create a 3D plot
@@ -342,7 +357,7 @@ def energy_spectrum(data_dir, N=100):
     ax2.set_xlim([0, np.max(kh)])
     ax2.legend()
 
-    fig.savefig('Buoyancy Energy Spectra', dpi=100)
+    fig.savefig('BuoyancyEnergySpectra.png', dpi=100)
     plt.close(fig)
 
     return None
@@ -353,12 +368,13 @@ def time_series(data_dir):
 
     f  = h5py.File(data_dir + 'scalar_data/scalar_data_s1.h5', mode='r')
     
+    pad = 10**2
     # Shape time,x,y,z
-    Eu     = f['tasks/Eu(t)'][:,0,0,0]
-    Eb     = f['tasks/Eb(t)'][:,0,0,0]
-    wB_avg = f['tasks/<wB>'][:,0,0,0]
-    B_avg  = f['tasks/<B>' ][:,0,0,0]
-    t      = f['scales/sim_time'][()]
+    Eu     = f['tasks/Eu(t)'][pad:,0,0,0]
+    Eb     = f['tasks/Eb(t)'][pad:,0,0,0]
+    wB_avg = f['tasks/<wB>'][pad:,0,0,0]
+    B_avg  = f['tasks/<B>' ][pad:,0,0,0]
+    t      = f['scales/sim_time'][()][pad:]
     
     f.close()
 
@@ -597,9 +613,9 @@ def plot_pdfs(data_dir, Nlevels=50, norm='log'):
 
 if __name__ == "__main__":
 
-    data_dir = "./"
+    data_dir = "./R0.7_test/"
     #video("./")
     #main("./")
     #time_series("./")
-    energy_spectrum("./")
+    energy_spectrum("./R0.7_test/")
     #plot_pdfs("./")

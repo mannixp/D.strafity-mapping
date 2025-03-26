@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -lselect=1:ncpus=256:mem=920gb
+#PBS -lwalltime=72:0:0
+# 72 hrs walltime HH:00:00
+# Load modules for any applications
+# details abve are Nodes,CPUs,mpirpocs
+module load anaconda3/personal
+
+module load tools/dev
+module load FFTW/3.3.10-iimpi-2022a
+module load iimpi/2022a
+module load HDF5/1.13.1-iimpi-2022a
+
+export FI_MLX_IFACE=eth0
+
+conda init bash
+source ~/.bashrc
+conda activate dedalus3_linked
+
+# Change to the directory the job was submitted from
+
+cd $PBS_O_WORKDIR
+
+# Run program, using 'mpiexec' to start the job
+# mpiexec automatically picks up the # of cores
+# assigned to the job. No other flags are required
+#  - note: don't use 'mpirun'
+
+mpiexec python3 $HOME/A1.8/main.py
+
+mkdir $WORK/$PBS_JOBID
+cp -r * $WORK/$PBS_JOBID
